@@ -4,9 +4,11 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response, Cookie
+from fastapi import FastAPI, HTTPException, Response, Cookie, Body
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, List
+from bson import ObjectId
 
 # Add project root, ai-layer and database to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +33,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="DayLog Backend", lifespan=lifespan)
 
+# Add CORS middleware to allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, replace with your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ── Schemas ──────────────────────────────────────────────────────────────────
 class JournalSubmitRequest(BaseModel):
     raw_text: str
@@ -43,6 +54,10 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+class JournalUpdate(BaseModel):
+    rawText: Optional[str] = None
+    title: Optional[str] = None
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def create_jwt(user_id: str):
@@ -63,24 +78,22 @@ def set_auth_cookie(response: Response, token: str):
         path="/"
     )
 
+def fix_id(doc):
+    if doc and "_id" in doc:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+    return doc
+
 # ── Auth Routes ──────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/signup", status_code=201)
 async def signup(req: SignupRequest, response: Response):
     col = users_col()
-    
-    # Check if email exists
     existing_user = await col.find_one({"email": req.email})
     if existing_user:
         raise HTTPException(status_code=409, detail="email already registered")
     
-    # Hash password
-    # bcrypt.hashpw expects bytes
-    password_bytes = req.password.encode('utf-8')
-    salt = bcrypt.gensalt(12)
-    password_hash = bcrypt.hashpw(password_bytes, salt).decode('utf-8')
-    
-    # Create user doc
+    password_hash = bcrypt.hashpw(req.password.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')
     user_doc = {
         "name": req.name,
         "email": req.email,
@@ -89,68 +102,92 @@ async def signup(req: SignupRequest, response: Response):
         "avatar_url": None,
         "created_at": datetime.now(timezone.utc)
     }
-    
     result = await col.insert_one(user_doc)
     user_id = str(result.inserted_id)
-    
-    # Create JWT and set cookie
     token = create_jwt(user_id)
     set_auth_cookie(response, token)
-    
-    return {
-        "user_id": user_id,
-        "name": req.name
-    }
+    return {"user_id": user_id, "name": req.name}
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest, response: Response):
     col = users_col()
-    
-    # Find user
     user = await col.find_one({"email": req.email})
-    if not user:
+    if not user or not bcrypt.checkpw(req.password.encode('utf-8'), user["password_hash"].encode('utf-8')):
         raise HTTPException(status_code=401, detail="invalid credentials")
     
-    # Verify password
-    password_bytes = req.password.encode('utf-8')
-    hash_bytes = user["password_hash"].encode('utf-8')
-    
-    if not bcrypt.checkpw(password_bytes, hash_bytes):
-        raise HTTPException(status_code=401, detail="invalid credentials")
-    
-    # Logged in - set cookie
     user_id = str(user["_id"])
     token = create_jwt(user_id)
     set_auth_cookie(response, token)
-    
-    return {
+    return {"user_id": user_id, "name": user["name"]}
+
+# ── Journal CRUD Routes (Matching Frontend) ──────────────────────────────────
+
+@app.get("/api/journals")
+async def get_journals(user_id: str = "default"):
+    """Fetch all journals for a user."""
+    col = journals_col()
+    cursor = col.find({"user_id": user_id}).sort("created_at", -1)
+    results = []
+    async for doc in cursor:
+        results.append(fix_id(doc))
+    return results
+
+@app.post("/api/journals")
+async def create_draft(user_id: str = "default"):
+    """Create a new empty journal draft."""
+    col = journals_col()
+    new_doc = {
         "user_id": user_id,
-        "name": user["name"]
+        "title": "Untitled Entry",
+        "rawText": "",
+        "processed": False,
+        "created_at": datetime.now(timezone.utc),
+        "date": datetime.now(timezone.utc).isoformat()
     }
+    result = await col.insert_one(new_doc)
+    new_doc["id"] = str(result.inserted_id)
+    del new_doc["_id"]
+    return new_doc
 
-# ── Journal Routes ───────────────────────────────────────────────────────────
-
-@app.get("/")
-async def root():
-    return {"message": "DayLog Backend API is running"}
-
-@app.post("/api/journal/{user_id}/submit")
-async def submit_journal(user_id: str, req: JournalSubmitRequest):
-    if not req.raw_text.strip():
-        raise HTTPException(status_code=400, detail="raw_text cannot be empty")
+@app.patch("/api/journals/{journal_id}")
+async def update_journal(journal_id: str, update: JournalUpdate):
+    """Update a journal draft (autosave)."""
+    col = journals_col()
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
     
-    try:
-        doc = await create_journal_entry(raw_text=req.raw_text, user_id=user_id)
-        col = journals_col()
-        result = await col.insert_one(doc)
-        doc["_id"] = str(result.inserted_id)
-        
-        return {
-            "status": "success",
-            "data": doc
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    await col.update_one({"_id": ObjectId(journal_id)}, {"$set": update_data})
+    return {"status": "updated"}
+
+@app.post("/api/journals/{journal_id}/submit")
+async def submit_and_process_journal(journal_id: str):
+    """Process a journal entry using AI and save results."""
+    col = journals_col()
+    doc = await col.find_one({"_id": ObjectId(journal_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Journal not found")
+    
+    raw_text = doc.get("rawText", "")
+    if not raw_text.strip():
+        raise HTTPException(status_code=400, detail="Cannot process empty journal")
+    
+    # Process via AI Layer
+    processed_data = await create_journal_entry(raw_text=raw_text, user_id=doc["user_id"])
+    
+    # Update the document with processed results
+    update_result = {
+        "processed": True,
+        "parsed": processed_data["parsed"],
+        "narrative": processed_data["journal_text"],
+        "processed_at": datetime.now(timezone.utc)
+    }
+    
+    await col.update_one({"_id": ObjectId(journal_id)}, {"$set": update_result})
+    
+    # Get the updated doc to return to frontend
+    final_doc = await col.find_one({"_id": ObjectId(journal_id)})
+    return fix_id(final_doc)
 
 if __name__ == "__main__":
     import uvicorn
