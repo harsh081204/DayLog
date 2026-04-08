@@ -31,3 +31,7 @@ def get_db():
 
 def journals_col():
     return get_db()["journals"]
+
+def users_col():
+    return get_db()["users"]
+
