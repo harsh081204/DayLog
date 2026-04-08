@@ -1,6 +1,6 @@
 import { DM_Serif_Display, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
-// import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 const dmSerifDisplay = DM_Serif_Display({
   weight: "400",
@@ -29,9 +29,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${dmSerifDisplay.variable} ${dmSans.variable} ${dmMono.variable}`}>
       <body>
-        {/* <AuthProvider> */}
-        {children}
-        {/* </AuthProvider> */}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

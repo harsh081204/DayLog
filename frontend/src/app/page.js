@@ -94,7 +94,7 @@ export default function Home() {
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
           {[
-            { num: '01', title: 'Write freely', text: 'Dump your day in plain language. No structure required — write like you\'re texting a friend.' },
+            { num: '01', title: 'Write freely', text: 'Dump your day in plain language. No structure required &mdash; write like you&apos;re texting a friend.' },
             { num: '02', title: 'AI processes it', text: 'Hit submit. Our LLM extracts skills, people, moods, habits and generates your journal narrative.' },
             { num: '03', title: 'Track your growth', text: 'See patterns over time — your skill trajectory, social graph, and productivity trends.' }
           ].map((step, idx) => (
@@ -168,21 +168,21 @@ export default function Home() {
         </div>
         <div className={styles.testimonials}>
           <div className={styles.testi}>
-            <p className={styles.testiText}>"I've tried 10 journaling apps. This is the first one that actually shows me what I did — not just what I wrote."</p>
+            <p className={styles.testiText}>&quot;I&apos;ve tried 10 journaling apps. This is the first one that actually shows me what I did &mdash; not just what I wrote.&quot;</p>
             <div className={styles.testiAuthor}>
               <div className={styles.testiAv} style={{ background: '#a8c675', color: '#212844' }}>RK</div>
               <div><div className={styles.testiName}>Rahul K.</div><div className={styles.testiRole}>CS student, IIT Delhi</div></div>
             </div>
           </div>
           <div className={styles.testi}>
-            <p className={styles.testiText}>"The skill tracking alone is worth it. I can literally see how many hours I've put into system design this month."</p>
+            <p className={styles.testiText}>&quot;The skill tracking alone is worth it. I can literally see how many hours I&apos;ve put into system design this month.&quot;</p>
             <div className={styles.testiAuthor}>
               <div className={styles.testiAv} style={{ background: '#2081c3', color: 'white' }}>PS</div>
               <div><div className={styles.testiName}>Priya S.</div><div className={styles.testiRole}>SWE intern, Bangalore</div></div>
             </div>
           </div>
           <div className={styles.testi}>
-            <p className={styles.testiText}>"Autosave + AI processing = I just write and forget. The structured output appears on its own. Genuinely magical."</p>
+            <p className={styles.testiText}>&quot;Autosave + AI processing = I just write and forget. The structured output appears on its own. Genuinely magical.&quot;</p>
             <div className={styles.testiAuthor}>
               <div className={styles.testiAv} style={{ background: '#212844', color: '#fffff4' }}>AV</div>
               <div><div className={styles.testiName}>Arjun V.</div><div className={styles.testiRole}>Indie hacker, Pune</div></div>
@@ -200,7 +200,7 @@ export default function Home() {
           Simple, honest pricing
         </h2>
         <p style={{ fontSize: '14px', color: 'rgba(33, 40, 68, 0.55)', textAlign: 'center', lineHeight: '1.7', maxWidth: '480px', margin: '0 auto 3rem' }}>
-          Start free. Upgrade when you're ready.
+          Start free. Upgrade when you&apos;re ready.
         </p>
         <div className={styles.pricingGrid}>
           <div className={styles.priceCard}>
