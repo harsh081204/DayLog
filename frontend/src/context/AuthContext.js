@@ -7,7 +7,8 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [authChecking, setAuthChecking] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -22,14 +23,14 @@ export function AuthProvider({ children }) {
             } catch (err) {
                 console.error("Auth check failed", err);
             } finally {
-                setLoading(false);
+                setAuthChecking(false);
             }
         };
         checkLogin();
     }, []);
 
     const login = async (email, password) => {
-        setLoading(true);
+        setIsSubmitting(true);
         try {
             const res = await fetch('http://localhost:8080/api/auth/login', { 
                 method: 'POST',
@@ -47,12 +48,12 @@ export function AuthProvider({ children }) {
         } catch (err) {
             return { success: false, error: err.message };
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
     const signup = async (userData) => {
-        setLoading(true);
+        setIsSubmitting(true);
         try {
             const res = await fetch('http://localhost:8080/api/auth/signup', { 
                 method: 'POST',
@@ -74,7 +75,7 @@ export function AuthProvider({ children }) {
         } catch (err) {
             return { success: false, error: err.message };
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -88,11 +89,19 @@ export function AuthProvider({ children }) {
             console.error("Logout failed", err);
         }
         setUser(null);
-        router.push('/login');
+        // Direct location change ensures all state is cleared and cookie path matches
+        window.location.href = '/login';
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            authChecking, 
+            isSubmitting, 
+            login, 
+            signup, 
+            logout 
+        }}>
             {children}
         </AuthContext.Provider>
     );

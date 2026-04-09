@@ -10,7 +10,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-    const { login, loading } = useAuth();
+    const { login, isSubmitting } = useAuth();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -93,10 +93,10 @@ export default function LoginPage() {
                 <button
                     className="btn btn-primary"
                     style={{ width: '100%', padding: '12px', marginBottom: '1.25rem' }}
-                    disabled={loading}
+                    disabled={isSubmitting}
                     type="submit"
                 >
-                    {loading ? "Logging in..." : "Log in"}
+                    {isSubmitting ? "Logging in..." : "Log in"}
                 </button>
 
                 <div className={styles.orRow}>

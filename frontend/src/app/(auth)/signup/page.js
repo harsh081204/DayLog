@@ -13,7 +13,7 @@ export default function SignupPage() {
     const [password, setPassword] = useState("");
     const [agreed, setAgreed] = useState(false);
     const [error, setError] = useState("");
-    const { signup, loading } = useAuth();
+    const { signup, isSubmitting } = useAuth();
 
     const getStrength = (v) => {
         let score = 0;
@@ -173,10 +173,10 @@ export default function SignupPage() {
                 <button
                     className="btn btn-primary"
                     style={{ width: '100%', padding: '12px', marginBottom: '1.25rem' }}
-                    disabled={loading}
+                    disabled={isSubmitting}
                     type="submit"
                 >
-                    {loading ? "Creating account..." : "Create account"}
+                    {isSubmitting ? "Creating account..." : "Create account"}
                 </button>
 
                 <div className={styles.orRow}>

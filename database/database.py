@@ -16,7 +16,14 @@ async def connect_db():
     global client
     if client is None:
         client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
-    return client[DB_NAME]
+    db = client[DB_NAME]
+    
+    # Enforce unique email at the DB level to prevent race conditions
+    await db["users"].create_index("email", unique=True)
+    # Compound index for efficient per-user journal listing
+    await db["journals"].create_index([("user_id", 1), ("created_at", -1)])
+    
+    return db
 
 async def close_db():
     global client

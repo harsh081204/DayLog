@@ -54,4 +54,7 @@ async def main():
         await close_db()
 
 if __name__ == "__main__":
+    if os.getenv("ALLOW_TEST_WRITE") != "1":
+        print("\n[!] Skipping DB write test. Set ALLOW_TEST_WRITE=1 to run.")
+        sys.exit(0)
     asyncio.run(main())

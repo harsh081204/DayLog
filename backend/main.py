@@ -26,7 +26,11 @@ from journal_service import create_journal_entry
 from database import connect_db, close_db, journals_col, users_col
 
 # ── Config ───────────────────────────────────────────────────────────────────
-JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key-123")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    # Fail fast if security configuration is missing
+    raise RuntimeError("JWT_SECRET environment variable is not set")
+
 JWT_ALGORITHM = "HS256"
 COOKIE_NAME = "token"
 
@@ -94,7 +98,14 @@ def get_user_id_from_token(token: str):
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload.get("user_id")
-    except:
+    except jwt.ExpiredSignatureError:
+        # Explicitly handle expired tokens
+        return None
+    except jwt.InvalidTokenError:
+        # Handle tampered or malformed tokens
+        return None
+    except Exception:
+        # Log other unexpected errors but still return None
         return None
 
 # ── Auth Routes ──────────────────────────────────────────────────────────────
@@ -155,7 +166,13 @@ async def get_me(token: Optional[str] = Cookie(None)):
 
 @app.post("/api/auth/logout")
 async def logout(response: Response):
-    response.delete_cookie(COOKIE_NAME)
+    # Ensure cookie is deleted with matching path and attributes
+    response.delete_cookie(
+        key=COOKIE_NAME, 
+        path="/", 
+        httponly=True, 
+        samesite="lax"
+    )
     return {"status": "logged out"}
 
 async def get_current_user_id(token: Optional[str] = Cookie(None)):
@@ -209,6 +226,9 @@ async def update_journal(journal_id: str, update: JournalUpdate, user_id: str = 
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
     
+    # Track when the document was last modified
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    
     await col.update_one({"_id": ObjectId(journal_id)}, {"$set": update_data})
     return {"status": "updated"}
 
@@ -237,8 +257,11 @@ async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get
     
     await col.update_one({"_id": ObjectId(journal_id)}, {"$set": update_result})
     
-    # Get the updated doc to return to frontend
-    final_doc = await col.find_one({"_id": ObjectId(journal_id)})
+    # Re-fetch the updated doc to return to frontend, ENSURING ownership check persists
+    final_doc = await col.find_one({"_id": ObjectId(journal_id), "user_id": user_id})
+    if not final_doc:
+        raise HTTPException(status_code=404, detail="Journal entry not found after processing")
+        
     return fix_id(final_doc)
 
 if __name__ == "__main__":

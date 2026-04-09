@@ -96,6 +96,12 @@ async def create_journal_entry(
 
 if __name__ == "__main__":
     import asyncio
+    import sys
+    
+    if os.getenv("ALLOW_TEST_WRITE") != "1":
+        print("\n[!] Skipping DB write test. Set ALLOW_TEST_WRITE=1 to run.")
+        sys.exit(0)
+
     async def run():
 
         sample = (

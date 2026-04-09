@@ -19,16 +19,28 @@ export default function JournalPage() {
 
     // ── Fetch all journals on mount ────────────────────────────────────────────
     const fetchJournals = useCallback(() => {
+        // Clear stale entries before fetching new ones
+        setEntries([]);
+        
         fetch("http://localhost:8080/api/journals", { credentials: "include" })
-            .then(res => res.json())
+            .then(res => {
+                if (res.status === 401) {
+                    window.location.href = "/login?reason=session_expired";
+                    return;
+                }
+                return res.json();
+            })
             .then(data => {
+                if (!data) return;
                 if (Array.isArray(data) && data.length > 0) {
                     setEntries(data);
                     setActiveId(data[0].id);
                     setMode(data[0].processed ? "result" : "editor");
                 }
             })
-            .catch(console.error);
+            .catch(err => {
+                console.error("Failed to fetch journals:", err);
+            });
     }, []);
 
     useEffect(() => {
@@ -75,6 +87,10 @@ export default function JournalPage() {
                 credentials: "include"
             })
                 .then(res => {
+                    if (res.status === 401) {
+                        window.location.href = "/login?reason=session_expired";
+                        return;
+                    }
                     if (res.ok) {
                         setSaveStatus("saved");
                         // Update entries list silently so sidebar preview stays fresh
@@ -105,8 +121,15 @@ export default function JournalPage() {
             headers: { "Content-Type": "application/json" },
             credentials: "include"
         })
-            .then(res => res.json())
+            .then(res => {
+                if (res.status === 401) {
+                    window.location.href = "/login?reason=session_expired";
+                    return;
+                }
+                return res.json();
+            })
             .then(data => {
+                if (!data) return;
                 clearInterval(interval);
                 setProcStep(4);
                 setTimeout(() => {
