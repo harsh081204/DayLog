@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
         // Check if user is logged in (via cookie or token)
         const checkLogin = async () => {
             try {
-                const res = await fetch('http://localhost:8080/api/auth/me', { credentials: 'include' });
+                const res = await fetch('http://localhost:8000/api/auth/me', { credentials: 'include' });
                 if (res.ok) {
                     const userData = await res.json();
                     setUser(userData);
@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
     const login = async (email, password) => {
         setIsSubmitting(true);
         try {
-            const res = await fetch('http://localhost:8080/api/auth/login', { 
+            const res = await fetch('http://localhost:8000/api/auth/login', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
     const signup = async (userData) => {
         setIsSubmitting(true);
         try {
-            const res = await fetch('http://localhost:8080/api/auth/signup', { 
+            const res = await fetch('http://localhost:8000/api/auth/signup', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -81,7 +81,7 @@ export function AuthProvider({ children }) {
 
     const logout = async () => {
         try {
-            await fetch('http://localhost:8080/api/auth/logout', { 
+            await fetch('http://localhost:8000/api/auth/logout', { 
                 method: 'POST',
                 credentials: 'include'
             });

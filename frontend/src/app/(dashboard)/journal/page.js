@@ -7,10 +7,11 @@ import styles from "./journal.module.css";
 export default function JournalPage() {
     const [entries, setEntries] = useState([]);
     const [searchTerm, setSearchTerm] = useState("");
-    const [activeId, setActiveId] = useState(null); // Only track the ID
+    const [activeId, setActiveId] = useState(null);
     const [mode, setMode] = useState("editor");
     const [procStep, setProcStep] = useState(0);
     const [saveStatus, setSaveStatus] = useState("saved");
+    const [isCreatingEntry, setIsCreatingEntry] = useState(false);
     const saveTimeoutRef = useRef(null);
     const editorRef = useRef(null);
 
@@ -22,7 +23,7 @@ export default function JournalPage() {
         // Clear stale entries before fetching new ones
         setEntries([]);
         
-        fetch("http://localhost:8080/api/journals", { credentials: "include" })
+        fetch("http://localhost:8000/api/journals", { credentials: "include" })
             .then(res => {
                 if (res.status === 401) {
                     window.location.href = "/login?reason=session_expired";
@@ -49,18 +50,29 @@ export default function JournalPage() {
 
     // ── Create a new draft ────────────────────────────────────────────────────
     const startNewEntry = () => {
-        fetch("http://localhost:8080/api/journals", {
+        if (isCreatingEntry) return; // Prevent duplicate clicks
+        setIsCreatingEntry(true);
+        
+        fetch("http://localhost:8000/api/journals", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include"
         })
-            .then(res => res.json())
+            .then(res => {
+                if (res.status === 401) {
+                    window.location.href = "/login?reason=session_expired";
+                    return;
+                }
+                return res.json();
+            })
             .then(newDraft => {
+                if (!newDraft) return;
                 setEntries(prev => [newDraft, ...prev]);
                 setActiveId(newDraft.id);
                 setMode("editor");
             })
-            .catch(console.error);
+            .catch(err => console.error("Failed to create entry:", err))
+            .finally(() => setIsCreatingEntry(false));
     };
 
     // ── Switch entry from sidebar ──────────────────────────────────────────────
@@ -80,7 +92,7 @@ export default function JournalPage() {
         // (that would cause a re-render which resets the cursor)
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = setTimeout(() => {
-            fetch(`http://localhost:8080/api/journals/${activeId}`, {
+            fetch(`http://localhost:8000/api/journals/${activeId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ rawText: newText }),
@@ -116,7 +128,7 @@ export default function JournalPage() {
             if (step < 4) { step++; setProcStep(step); }
         }, 1500);
 
-        fetch(`http://localhost:8080/api/journals/${activeId}/submit`, {
+        fetch(`http://localhost:8000/api/journals/${activeId}/submit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include"
@@ -176,7 +188,12 @@ export default function JournalPage() {
             {/* ── SIDEBAR ── */}
             <div className={dashStyles.sidebar}>
                 <div className={dashStyles.sbHead}>
-                    <button className={dashStyles.sbNewBtn} onClick={startNewEntry}>
+                    <button 
+                        className={dashStyles.sbNewBtn} 
+                        onClick={startNewEntry}
+                        disabled={isCreatingEntry}
+                        style={{ opacity: isCreatingEntry ? 0.6 : 1, cursor: isCreatingEntry ? 'not-allowed' : 'pointer' }}
+                    >
                         <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                             <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                         </svg>
