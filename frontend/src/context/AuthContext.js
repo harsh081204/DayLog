@@ -14,12 +14,10 @@ export function AuthProvider({ children }) {
         // Check if user is logged in (via cookie or token)
         const checkLogin = async () => {
             try {
-                // We'll call a simple /me or /profile endpoint later
-                // For now, check if the token cookie exists
-                const hasToken = document.cookie.includes('token=');
-                if (hasToken) {
-                    // Simulated user data for now
-                    setUser({ id: '1', name: 'Rahul Kumar', email: 'rahul@example.com' });
+                const res = await fetch('http://localhost:8080/api/auth/me', { credentials: 'include' });
+                if (res.ok) {
+                    const userData = await res.json();
+                    setUser(userData);
                 }
             } catch (err) {
                 console.error("Auth check failed", err);
@@ -33,14 +31,17 @@ export function AuthProvider({ children }) {
     const login = async (email, password) => {
         setLoading(true);
         try {
-            // 1. CALL GO BACKEND (Placeholder URL for now)
-            // const res = await fetch('http://localhost:8080/api/login', { 
-            //   method: 'POST', body: JSON.stringify({ email, password }) 
-            // });
+            const res = await fetch('http://localhost:8080/api/auth/login', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+                credentials: 'include'
+            });
+            
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Login failed');
 
-            // 2. SIMULATE SUCCESS (Since Go isn't running yet)
-            document.cookie = "token=simulated-jwt-token; path=/; max-age=86400";
-            setUser({ id: '1', email });
+            setUser(data);
             router.push('/journal');
             return { success: true };
         } catch (err) {
@@ -53,12 +54,21 @@ export function AuthProvider({ children }) {
     const signup = async (userData) => {
         setLoading(true);
         try {
-            // 1. CALL GO BACKEND
-            // const res = await fetch('http://localhost:8080/api/signup', { ... });
+            const res = await fetch('http://localhost:8080/api/auth/signup', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `${userData.firstName} ${userData.lastName}`.trim(),
+                    email: userData.email,
+                    password: userData.password
+                }),
+                credentials: 'include'
+            });
 
-            // 2. SIMULATE SUCCESS
-            document.cookie = "token=simulated-jwt-token; path=/; max-age=86400";
-            setUser({ id: '1', ...userData });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Signup failed');
+
+            setUser(data);
             router.push('/journal');
             return { success: true };
         } catch (err) {
@@ -68,8 +78,15 @@ export function AuthProvider({ children }) {
         }
     };
 
-    const logout = () => {
-        document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    const logout = async () => {
+        try {
+            await fetch('http://localhost:8080/api/auth/logout', { 
+                method: 'POST',
+                credentials: 'include'
+            });
+        } catch (err) {
+            console.error("Logout failed", err);
+        }
         setUser(null);
         router.push('/login');
     };

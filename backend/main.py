@@ -4,7 +4,7 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response, Cookie, Body
+from fastapi import FastAPI, HTTPException, Response, Cookie, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
@@ -79,7 +79,7 @@ def set_auth_cookie(response: Response, token: str):
         value=token,
         httponly=True,
         secure=False,  # Set to True in production (HTTPS)
-        samesite="strict",
+        samesite="lax", # "lax" is better for dev with different ports
         max_age=604800,  # 7 days
         path="/"
     )
@@ -89,6 +89,13 @@ def fix_id(doc):
         doc["id"] = str(doc["_id"])
         del doc["_id"]
     return doc
+
+def get_user_id_from_token(token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload.get("user_id")
+    except:
+        return None
 
 # ── Auth Routes ──────────────────────────────────────────────────────────────
 
@@ -126,10 +133,43 @@ async def login(req: LoginRequest, response: Response):
     set_auth_cookie(response, token)
     return {"user_id": user_id, "name": user["name"]}
 
+@app.get("/api/auth/me")
+async def get_me(token: Optional[str] = Cookie(None)):
+    if not token:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="invalid token")
+    
+    col = users_col()
+    user = await col.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    
+    return {
+        "user_id": str(user["_id"]),
+        "name": user["name"],
+        "email": user["email"]
+    }
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie(COOKIE_NAME)
+    return {"status": "logged out"}
+
+async def get_current_user_id(token: Optional[str] = Cookie(None)):
+    if not token:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="invalid token")
+    return user_id
+
 # ── Journal CRUD Routes (Matching Frontend) ──────────────────────────────────
 
 @app.get("/api/journals")
-async def get_journals(user_id: str = "default"):
+async def get_journals(user_id: str = Depends(get_current_user_id)):
     """Fetch all journals for a user."""
     col = journals_col()
     cursor = col.find({"user_id": user_id}).sort("created_at", -1)
@@ -139,7 +179,7 @@ async def get_journals(user_id: str = "default"):
     return results
 
 @app.post("/api/journals")
-async def create_draft(user_id: str = "default"):
+async def create_draft(user_id: str = Depends(get_current_user_id)):
     """Create a new empty journal draft."""
     col = journals_col()
     new_doc = {
@@ -156,9 +196,15 @@ async def create_draft(user_id: str = "default"):
     return new_doc
 
 @app.patch("/api/journals/{journal_id}")
-async def update_journal(journal_id: str, update: JournalUpdate):
+async def update_journal(journal_id: str, update: JournalUpdate, user_id: str = Depends(get_current_user_id)):
     """Update a journal draft (autosave)."""
     col = journals_col()
+    
+    # Ownership check
+    existing = await col.find_one({"_id": ObjectId(journal_id), "user_id": user_id})
+    if not existing:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this entry")
+
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -167,12 +213,12 @@ async def update_journal(journal_id: str, update: JournalUpdate):
     return {"status": "updated"}
 
 @app.post("/api/journals/{journal_id}/submit")
-async def submit_and_process_journal(journal_id: str):
+async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get_current_user_id)):
     """Process a journal entry using AI and save results."""
     col = journals_col()
-    doc = await col.find_one({"_id": ObjectId(journal_id)})
+    doc = await col.find_one({"_id": ObjectId(journal_id), "user_id": user_id})
     if not doc:
-        raise HTTPException(status_code=404, detail="Journal not found")
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this entry")
     
     raw_text = doc.get("rawText", "")
     if not raw_text.strip():
@@ -197,4 +243,4 @@ async def submit_and_process_journal(journal_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

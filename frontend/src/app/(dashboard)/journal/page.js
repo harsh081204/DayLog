@@ -19,7 +19,7 @@ export default function JournalPage() {
 
     // ── Fetch all journals on mount ────────────────────────────────────────────
     const fetchJournals = useCallback(() => {
-        fetch("http://127.0.0.1:8080/api/journals", { credentials: "include" })
+        fetch("http://localhost:8080/api/journals", { credentials: "include" })
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data) && data.length > 0) {
@@ -37,7 +37,7 @@ export default function JournalPage() {
 
     // ── Create a new draft ────────────────────────────────────────────────────
     const startNewEntry = () => {
-        fetch("http://127.0.0.1:8080/api/journals", {
+        fetch("http://localhost:8080/api/journals", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include"
@@ -68,7 +68,7 @@ export default function JournalPage() {
         // (that would cause a re-render which resets the cursor)
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = setTimeout(() => {
-            fetch(`http://127.0.0.1:8080/api/journals/${activeId}`, {
+            fetch(`http://localhost:8080/api/journals/${activeId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ rawText: newText }),
@@ -100,7 +100,7 @@ export default function JournalPage() {
             if (step < 4) { step++; setProcStep(step); }
         }, 1500);
 
-        fetch(`http://127.0.0.1:8080/api/journals/${activeId}/submit`, {
+        fetch(`http://localhost:8080/api/journals/${activeId}/submit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include"

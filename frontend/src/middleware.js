@@ -5,7 +5,20 @@ const protectedRoutes = ['/journal', '/profile'];
 const authRoutes = ['/login', '/signup'];
 
 export function middleware(request) {
-    // BYPASSING MIDDLEWARE FOR TESTING
+    const token = request.cookies.get('token');
+    const path = request.nextUrl.pathname;
+
+    const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route));
+    const isAuthRoute = authRoutes.includes(path);
+
+    if (isProtectedRoute && !token) {
+        return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    if (isAuthRoute && token) {
+        return NextResponse.redirect(new URL('/journal', request.url));
+    }
+
     return NextResponse.next();
 }
 

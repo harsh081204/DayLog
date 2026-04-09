@@ -252,7 +252,7 @@ export default function Home() {
       <footer className={styles.footer}>
         <span className={styles.footerLogo}>daylog</span>
         <ul className={styles.footerLinks}>
-          <li><Link href="#">About</Link></li>
+          <li><Link href="/about">About</Link></li>
           <li><Link href="#">Privacy</Link></li>
           <li><Link href="#">Terms</Link></li>
           <li><Link href="#">Contact</Link></li>
