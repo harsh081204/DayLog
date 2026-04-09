@@ -9,6 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from bson import ObjectId
+from dotenv import load_dotenv
+
+# Path to the .env file in the ai-layer directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(os.path.dirname(current_dir), "ai-layer", ".env")
+load_dotenv(env_path)
 
 # Add project root, ai-layer and database to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,7 +42,7 @@ app = FastAPI(title="DayLog Backend", lifespan=lifespan)
 # Add CORS middleware to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with your frontend URL
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -191,4 +197,4 @@ async def submit_and_process_journal(journal_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="127.0.0.1", port=8080)
