@@ -1,5 +1,6 @@
+import json
 from datetime import datetime, timezone
-from ai_processer import parse_journal_input, ParsedJournal
+from ai_processer import parse_journal_input, ParsedJournal, client
 
 # ── Journal Text Generator ───────────────────────────────────────────────────
 
@@ -54,6 +55,47 @@ def _build_journal_text(raw_text: str, parsed: ParsedJournal) -> str:
     return " ".join(lines) if lines else "A day in the books."
 
 
+async def _build_journal_text_llm(raw_text: str, parsed: ParsedJournal) -> tuple[str, str]:
+    """
+    Generate a short natural-sounding narrative using Groq.
+    Falls back to template text if LLM call fails.
+    """
+    parsed_json = json.dumps(parsed.model_dump(), ensure_ascii=True)
+    prompt = (
+        "You are a thoughtful journaling assistant.\n"
+        "Write a short, natural summary of this day in second person ('you').\n"
+        "Style constraints:\n"
+        "- 3 to 5 sentences\n"
+        "- warm and encouraging tone\n"
+        "- mention key activities, mood, and one suggestion for tomorrow\n"
+        "- do not mention JSON, schema, or that this is AI generated\n"
+        "- keep it concise and human\n\n"
+        f"Raw journal text:\n{raw_text}\n\n"
+        f"Structured parse:\n{parsed_json}"
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You write empathetic daily journal summaries in second person.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.5,
+        )
+        output = (response.choices[0].message.content or "").strip()
+        if output:
+            return output, "llm"
+    except Exception:
+        # Degrade gracefully to deterministic template when LLM fails.
+        pass
+
+    return _build_journal_text(raw_text, parsed), "template_fallback"
+
+
 # ── Core Service Function ────────────────────────────────────────────────────
 
 async def create_journal_entry(
@@ -76,8 +118,8 @@ async def create_journal_entry(
         user_profile=user_profile,
     )
 
-    # Step 2: Generate narrative
-    journal_text = _build_journal_text(raw_text, parsed)
+    # Step 2: Generate narrative (LLM-first, deterministic fallback)
+    journal_text, journal_text_source = await _build_journal_text_llm(raw_text, parsed)
 
     # Step 3: Build document
     doc = {
@@ -85,6 +127,7 @@ async def create_journal_entry(
         "raw_text": raw_text,
         "parsed": parsed.model_dump(),
         "journal_text": journal_text,
+        "journal_text_source": journal_text_source,
         "created_at": datetime.now(timezone.utc),
     }
 
