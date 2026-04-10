@@ -65,6 +65,10 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1)
+    email: Optional[EmailStr] = None
+
 class JournalUpdate(BaseModel):
     rawText: Optional[str] = None
     title: Optional[str] = None
@@ -94,6 +98,64 @@ def fix_id(doc):
         del doc["_id"]
     return doc
 
+def derive_title(raw_text: str, fallback: str = "Untitled Entry") -> str:
+    if not raw_text:
+        return fallback
+    first_line = raw_text.strip().splitlines()[0].strip()
+    if not first_line:
+        return fallback
+    clean = " ".join(first_line.split())
+    return clean[:60] + ("..." if len(clean) > 60 else "")
+
+def score_productivity(parsed: dict) -> tuple[float, str]:
+    entries = parsed.get("entries", []) if isinstance(parsed, dict) else []
+    if not entries:
+        return 0.5, "No activities extracted; using neutral baseline."
+
+    weights = {
+        "study": 1.2,
+        "coding": 1.2,
+        "work": 1.0,
+        "habit": 0.8,
+        "gym": 0.7,
+        "social": 0.4,
+        "travel": 0.2,
+        "food": 0.1,
+        "sleep": 0.2,
+        "leisure": -0.4,
+    }
+
+    score = 0.45
+    total = len(entries)
+    done_count = 0
+    leisure_count = 0
+
+    for entry in entries:
+        entry_type = (entry.get("type") or "other").lower()
+        status = (entry.get("status") or "done").lower()
+        base = weights.get(entry_type, 0.2)
+        if status == "done":
+            score += base * 0.16
+            done_count += 1
+        elif status == "pending":
+            score += base * 0.06
+        elif status == "maybe":
+            score += base * 0.03
+
+        if entry_type == "leisure":
+            leisure_count += 1
+
+    completion_ratio = done_count / max(total, 1)
+    score += (completion_ratio - 0.5) * 0.18
+    score -= max(0, leisure_count - 1) * 0.06
+
+    normalized = round(min(1.0, max(0.0, score)), 2)
+    reason = (
+        f"Based on {done_count}/{total} completed activities, "
+        f"activity mix, and leisure penalty."
+    )
+    return normalized, reason
+
 def get_user_id_from_token(token: str):
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -107,6 +169,14 @@ def get_user_id_from_token(token: str):
     except Exception:
         # Log other unexpected errors but still return None
         return None
+
+async def get_current_user_id(token: Optional[str] = Cookie(None)):
+    if not token:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="invalid token")
+    return user_id
 
 # ── Auth Routes ──────────────────────────────────────────────────────────────
 
@@ -164,6 +234,37 @@ async def get_me(token: Optional[str] = Cookie(None)):
         "email": user["email"]
     }
 
+@app.patch("/api/auth/me")
+async def update_me(req: ProfileUpdateRequest, user_id: str = Depends(get_current_user_id)):
+    col = users_col()
+    update_data = {}
+
+    if req.name is not None:
+        clean_name = req.name.strip()
+        if not clean_name:
+            raise HTTPException(status_code=400, detail="name cannot be empty")
+        update_data["name"] = clean_name
+
+    if req.email is not None:
+        existing_user = await col.find_one({"email": req.email, "_id": {"$ne": ObjectId(user_id)}})
+        if existing_user:
+            raise HTTPException(status_code=409, detail="email already registered")
+        update_data["email"] = req.email
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
+    await col.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+    user = await col.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    return {
+        "user_id": str(user["_id"]),
+        "name": user["name"],
+        "email": user["email"]
+    }
+
 @app.post("/api/auth/logout")
 async def logout(response: Response):
     # Ensure cookie is deleted with matching path and attributes
@@ -174,14 +275,6 @@ async def logout(response: Response):
         samesite="lax"
     )
     return {"status": "logged out"}
-
-async def get_current_user_id(token: Optional[str] = Cookie(None)):
-    if not token:
-        raise HTTPException(status_code=401, detail="not authenticated")
-    user_id = get_user_id_from_token(token)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="invalid token")
-    return user_id
 
 # ── Journal CRUD Routes (Matching Frontend) ──────────────────────────────────
 
@@ -211,6 +304,16 @@ async def create_draft(user_id: str = Depends(get_current_user_id)):
     new_doc["id"] = str(result.inserted_id)
     del new_doc["_id"]
     return new_doc
+
+@app.delete("/api/journals/{journal_id}")
+async def delete_journal(journal_id: str, user_id: str = Depends(get_current_user_id)):
+    col = journals_col()
+    existing = await col.find_one({"_id": ObjectId(journal_id), "user_id": user_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+
+    await col.delete_one({"_id": ObjectId(journal_id), "user_id": user_id})
+    return {"status": "deleted", "id": journal_id}
 
 @app.patch("/api/journals/{journal_id}")
 async def update_journal(journal_id: str, update: JournalUpdate, user_id: str = Depends(get_current_user_id)):
@@ -246,12 +349,20 @@ async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get
     
     # Process via AI Layer
     processed_data = await create_journal_entry(raw_text=raw_text, user_id=doc["user_id"])
+    parsed = processed_data["parsed"]
+    calc_score, calc_reason = score_productivity(parsed)
+    if "meta" not in parsed or not isinstance(parsed["meta"], dict):
+        parsed["meta"] = {}
+    parsed["meta"]["productivity_score"] = calc_score
+    parsed["meta"]["productivity_reason"] = calc_reason
+    update_title = derive_title(raw_text, fallback=doc.get("title", "Untitled Entry"))
     
     # Update the document with processed results
     update_result = {
         "processed": True,
-        "parsed": processed_data["parsed"],
+        "parsed": parsed,
         "narrative": processed_data["journal_text"],
+        "title": update_title,
         "processed_at": datetime.now(timezone.utc)
     }
     

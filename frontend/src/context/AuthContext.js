@@ -93,6 +93,26 @@ export function AuthProvider({ children }) {
         window.location.href = '/login';
     };
 
+    const updateUserProfile = async (payload) => {
+        setIsSubmitting(true);
+        try {
+            const res = await fetch("http://localhost:8000/api/auth/me", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+                credentials: "include"
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || "Failed to update profile");
+            setUser(data);
+            return { success: true, data };
+        } catch (err) {
+            return { success: false, error: err.message };
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <AuthContext.Provider value={{ 
             user, 
@@ -100,7 +120,8 @@ export function AuthProvider({ children }) {
             isSubmitting, 
             login, 
             signup, 
-            logout 
+            logout,
+            updateUserProfile
         }}>
             {children}
         </AuthContext.Provider>

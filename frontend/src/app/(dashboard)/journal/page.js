@@ -4,6 +4,36 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import dashStyles from "../dashboard.module.css";
 import styles from "./journal.module.css";
 
+const deriveEntryTitle = (rawText, fallback = "Untitled Entry") => {
+    const firstLine = (rawText || "").split("\n").map((line) => line.trim()).find(Boolean);
+    if (!firstLine) return fallback;
+    return firstLine.length > 60 ? `${firstLine.slice(0, 60)}...` : firstLine;
+};
+
+const getDisplayTitle = (entry) => {
+    const title = (entry?.title || "").trim();
+    if (title && title.toLowerCase() !== "untitled entry") return title;
+    const textFallback = deriveEntryTitle(entry?.rawText || "", "");
+    if (textFallback) return textFallback;
+    return "Untitled Entry";
+};
+
+const getActivityLabel = (activity) => {
+    const data = activity?.data || {};
+    return (
+        data.subject ||
+        data.what_built ||
+        data.topic ||
+        data.project ||
+        data.activity ||
+        data.title ||
+        data.destination ||
+        data.meal ||
+        data.notes ||
+        `${activity?.type || "activity"} update`
+    );
+};
+
 export default function JournalPage() {
     const [entries, setEntries] = useState([]);
     const [searchTerm, setSearchTerm] = useState("");
@@ -82,10 +112,43 @@ export default function JournalPage() {
         setSaveStatus("saved");
     };
 
+    const deleteEntry = (entryId) => {
+        const ok = window.confirm("Delete this journal entry permanently?");
+        if (!ok) return;
+
+        fetch(`http://localhost:8000/api/journals/${entryId}`, {
+            method: "DELETE",
+            credentials: "include"
+        })
+            .then(res => {
+                if (res.status === 401) {
+                    window.location.href = "/login?reason=session_expired";
+                    return null;
+                }
+                if (!res.ok) throw new Error("Failed to delete entry");
+                return res.json();
+            })
+            .then(() => {
+                setEntries(prev => {
+                    const next = prev.filter(e => e.id !== entryId);
+                    if (activeId === entryId) {
+                        const nextActive = next[0];
+                        setActiveId(nextActive?.id || null);
+                        setMode(nextActive?.processed ? "result" : "editor");
+                    }
+                    return next;
+                });
+            })
+            .catch(err => {
+                alert(err.message || "Could not delete entry");
+            });
+    };
+
     // ── Autosave on typing ────────────────────────────────────────────────────
     const handleType = () => {
         if (!editorRef.current || !activeId) return;
         const newText = editorRef.current.innerText;
+        const newTitle = deriveEntryTitle(newText);
         setSaveStatus("saving");
 
         // Debounce save to backend — do NOT update React state here
@@ -95,7 +158,7 @@ export default function JournalPage() {
             fetch(`http://localhost:8000/api/journals/${activeId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rawText: newText }),
+                body: JSON.stringify({ rawText: newText, title: newTitle }),
                 credentials: "include"
             })
                 .then(res => {
@@ -107,7 +170,7 @@ export default function JournalPage() {
                         setSaveStatus("saved");
                         // Update entries list silently so sidebar preview stays fresh
                         setEntries(prev =>
-                            prev.map(e => e.id === activeId ? { ...e, rawText: newText } : e)
+                            prev.map(e => e.id === activeId ? { ...e, rawText: newText, title: newTitle } : e)
                         );
                     } else {
                         setSaveStatus("error");
@@ -174,10 +237,13 @@ export default function JournalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeId]); // Only run when switching entries
 
-    const filteredEntries = entries.filter(e =>
-        (e.title && e.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (e.rawText && e.rawText.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const filteredEntries = entries.filter(e => {
+        const displayTitle = getDisplayTitle(e);
+        return (
+            displayTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (e.rawText && e.rawText.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+    });
 
     const wordCount = currentEntry?.rawText
         ? currentEntry.rawText.split(/\s+/).filter(Boolean).length
@@ -217,10 +283,31 @@ export default function JournalPage() {
                             >
                                 <div className={dashStyles.eiDate}>{new Date(e.date).toLocaleDateString()}</div>
                                 <div className={dashStyles.eiRow}>
-                                    <div className={dashStyles.eiTitle} style={{ flex: 1 }}>{e.title || "Untitled"}</div>
+                                    <div className={dashStyles.eiTitle} style={{ flex: 1 }}>{getDisplayTitle(e)}</div>
                                     {hasParsed && e.parsed.meta &&
                                         <div className={dashStyles.eiScore}>{(e.parsed.meta.productivity_score || 0).toFixed(1)}</div>
                                     }
+                                    <button
+                                        onClick={(ev) => {
+                                            ev.stopPropagation();
+                                            deleteEntry(e.id);
+                                        }}
+                                        title="Delete entry"
+                                        style={{
+                                            marginLeft: "6px",
+                                            border: "1px solid rgba(33,40,68,0.12)",
+                                            borderRadius: "6px",
+                                            width: "22px",
+                                            height: "22px",
+                                            background: "white",
+                                            color: "rgba(33,40,68,0.5)",
+                                            cursor: "pointer",
+                                            fontSize: "12px",
+                                            lineHeight: 1
+                                        }}
+                                    >
+                                        ×
+                                    </button>
                                 </div>
                                 <div className={dashStyles.eiPreview}>{(e.rawText || "").substring(0, 50)}...</div>
                                 {hasParsed && (
@@ -323,6 +410,9 @@ export default function JournalPage() {
                                     processed via AI
                                 </span>
                             </div>
+                            <div className={styles.rsLabel} style={{ marginTop: "-8px", marginBottom: "14px" }}>
+                                {currentEntry.parsed?.meta?.productivity_reason || "Score combines completed activities and activity mix."}
+                            </div>
                             <div className={styles.resultNarrative}>&quot;{currentEntry.narrative}&quot;</div>
 
                             <div className={styles.resultSection}>
@@ -331,7 +421,7 @@ export default function JournalPage() {
                                     {currentEntry.parsed?.entries?.map((a, i) => (
                                         <div key={i} className={styles.entryCard}>
                                             <div className={styles.ecType}>{a.type}</div>
-                                            <div className={styles.ecTitle}>{a.data?.subject || a.data?.what_built || "Logged Event"}</div>
+                                            <div className={styles.ecTitle}>{getActivityLabel(a)}</div>
                                             <div className={styles.ecMeta}>{a.time_hint || "Today"}</div>
                                             <span className={`${styles.ecBadge} ${a.status === "done" ? styles.ecDone : styles.ecPending}`}>
                                                 {a.status}

@@ -65,6 +65,27 @@
   margin-bottom: 8px;
 }
 
+.editForm {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editInput {
+  padding: 7px 10px;
+  border: 1px solid rgba(33, 40, 68, 0.15);
+  border-radius: 8px;
+  font-size: 12px;
+  min-width: 180px;
+  color: var(--c-navy);
+  background: white;
+}
+
+.editInput:focus {
+  outline: 1px solid rgba(32, 129, 195, 0.35);
+}
+
 .profileTags {
   display: flex;
   gap: 6px;
