@@ -409,6 +409,9 @@ export default function JournalPage() {
                                 <span className="badge" style={{ background: "rgba(33,40,68,0.06)", color: "var(--c-navy)", padding: "6px 14px" }}>
                                     processed via AI
                                 </span>
+                                <span className="badge" style={{ background: "rgba(32,129,195,0.1)", color: "#145585", padding: "6px 14px" }}>
+                                    narrative {currentEntry.narrative_source === "llm" ? "llm" : "fallback"}
+                                </span>
                             </div>
                             <div className={styles.rsLabel} style={{ marginTop: "-8px", marginBottom: "14px" }}>
                                 {currentEntry.parsed?.meta?.productivity_reason || "Score combines completed activities and activity mix."}

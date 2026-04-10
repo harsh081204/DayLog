@@ -362,6 +362,7 @@ async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get
         "processed": True,
         "parsed": parsed,
         "narrative": processed_data["journal_text"],
+        "narrative_source": processed_data.get("journal_text_source", "unknown"),
         "title": update_title,
         "processed_at": datetime.now(timezone.utc)
     }
