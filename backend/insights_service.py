@@ -28,29 +28,34 @@ def _slug(s: str) -> str:
     return x or "unknown"
 
 
+def _parse_dt(val: Any) -> Optional[datetime]:
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            return val.replace(tzinfo=timezone.utc)
+        return val.astimezone(timezone.utc)
+    if isinstance(val, str):
+        try:
+            d = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone.utc)
+            return d.astimezone(timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
 def _entry_datetime(doc: dict[str, Any]) -> Optional[datetime]:
-    raw = doc.get("created_at")
-    if isinstance(raw, datetime):
-        if raw.tzinfo is None:
-            return raw.replace(tzinfo=timezone.utc)
-        return raw.astimezone(timezone.utc)
-    if isinstance(raw, str):
-        try:
-            d = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            if d.tzinfo is None:
-                d = d.replace(tzinfo=timezone.utc)
-            return d.astimezone(timezone.utc)
-        except ValueError:
-            pass
-    raw_d = doc.get("date")
-    if isinstance(raw_d, str):
-        try:
-            d = datetime.fromisoformat(raw_d.replace("Z", "+00:00"))
-            if d.tzinfo is None:
-                d = d.replace(tzinfo=timezone.utc)
-            return d.astimezone(timezone.utc)
-        except ValueError:
-            pass
+    """Canonical timeline: processed_at → created_at → date (processed); else created_at → date."""
+    if doc.get("processed"):
+        for key in ("processed_at", "created_at", "date"):
+            d = _parse_dt(doc.get(key))
+            if d:
+                return d
+    else:
+        for key in ("created_at", "date", "processed_at"):
+            d = _parse_dt(doc.get(key))
+            if d:
+                return d
     return None
 
 
@@ -227,6 +232,8 @@ async def build_insights_response(user_id: str) -> dict[str, Any]:
             worst_avg = dow_avg[worst_d]
             if worst_avg < overall - 0.08 and worst_d in dow_avg:
                 day_name = WEEKDAY_NAMES[worst_d]
+                worst_n = len(by_dow[worst_d])
+                conf = "low" if worst_n <= 3 else "high"
                 insights.append(
                     _insight(
                         f"day_pattern_{_slug(day_name)}",
@@ -234,7 +241,14 @@ async def build_insights_response(user_id: str) -> dict[str, Any]:
                         "info",
                         f"{day_name} slump detected",
                         f"Your avg on {day_name}s is {worst_avg:.2f} vs your overall {overall:.2f}.",
-                        {"day": day_name, "day_avg": round(worst_avg, 2), "overall_avg": round(overall, 2)},
+                        {
+                            "day": day_name,
+                            "day_index": worst_d,
+                            "day_avg": round(worst_avg, 2),
+                            "overall_avg": round(overall, 2),
+                            "sample_count": worst_n,
+                            "confidence": conf,
+                        },
                     )
                 )
 
@@ -264,6 +278,12 @@ async def build_insights_response(user_id: str) -> dict[str, Any]:
             if abs(diff) <= CORRELATION_GAP:
                 continue
             label = act.capitalize()
+            bucket_min = min(len(with_a), len(without))
+            conf = (
+                "low"
+                if (abs(diff) < 0.22 or bucket_min < 8)
+                else "high"
+            )
             if diff > 0:
                 insights.append(
                     _insight(
@@ -277,6 +297,8 @@ async def build_insights_response(user_id: str) -> dict[str, Any]:
                             "avg_with": round(aw, 2),
                             "avg_without": round(wo, 2),
                             "with_count": len(with_a),
+                            "without_count": len(without),
+                            "confidence": conf,
                         },
                     )
                 )
@@ -293,6 +315,8 @@ async def build_insights_response(user_id: str) -> dict[str, Any]:
                             "avg_with": round(aw, 2),
                             "avg_without": round(wo, 2),
                             "with_count": len(with_a),
+                            "without_count": len(without),
+                            "confidence": conf,
                         },
                     )
                 )

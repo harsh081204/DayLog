@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import styles from "./insights.module.css";
 
 function iconFor(insight) {
@@ -16,8 +17,12 @@ function cardClass(severity) {
   return `${styles.card} ${styles.cardInfo}`;
 }
 
-export default function InsightCard({ insight }) {
+export default function InsightCard({ insight, onDismiss }) {
   if (!insight) return null;
+  const low = insight.meta?.confidence === "low";
+  const dow = insight.meta?.day_index;
+  const showJournalLink = insight.type === "day_pattern" && typeof dow === "number" && dow >= 0 && dow <= 6;
+
   return (
     <div className={cardClass(insight.severity)}>
       <div className={styles.row}>
@@ -27,6 +32,17 @@ export default function InsightCard({ insight }) {
         <div className={styles.ct}>
           <div className={styles.cardTitle}>{insight.title}</div>
           <div className={styles.cardBody}>{insight.body}</div>
+          {low ? <div className={styles.confidencePill}>Low sample — treat as a hint, not a verdict.</div> : null}
+          {showJournalLink ? (
+            <Link href={`/journal?dow=${dow}`} className={styles.cardLink}>
+              See entries on {insight.meta?.day || "this weekday"}
+            </Link>
+          ) : null}
+          {onDismiss ? (
+            <button type="button" className={styles.dismissBtn} onClick={() => onDismiss(insight.id)}>
+              Hide
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

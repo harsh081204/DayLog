@@ -4,12 +4,20 @@ import styles from "./profile.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import InsightCards from "@/components/InsightCards";
+import { apiUrl } from "@/lib/api";
+import { entryCanonicalInstant } from "@/lib/entryDate";
 
 const STREAK_COLORS = ["rgba(33, 40, 68, 0.07)", "rgba(168, 198, 117, 0.3)", "rgba(168, 198, 117, 0.6)", "#a8c675"];
 const DONUT_COLORS = ["var(--c-blue)", "var(--c-green)", "var(--c-navy)", "var(--c-yellow)", "rgba(33,40,68,0.2)"];
 
-const toDateKey = (value) => {
-  const d = new Date(value || Date.now());
+const entryDateKey = (entry) => {
+  const d = entryCanonicalInstant(entry);
+  if (!d) return null;
+  return d.toISOString().slice(0, 10);
+};
+
+const dateValueToKey = (value) => {
+  const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
 };
@@ -55,7 +63,7 @@ export default function ProfilePage() {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch("http://localhost:8000/api/journals", { credentials: "include" });
+        const res = await fetch(apiUrl("/api/journals"), { credentials: "include" });
         if (res.status === 401) {
           window.location.href = "/login?reason=session_expired";
           return;
@@ -83,7 +91,7 @@ export default function ProfilePage() {
 
     const dayCount = new Map();
     entries.forEach((e) => {
-      const key = toDateKey(e.date || e.created_at);
+      const key = entryDateKey(e);
       if (key) dayCount.set(key, (dayCount.get(key) || 0) + 1);
     });
 
@@ -120,7 +128,7 @@ export default function ProfilePage() {
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
-      const key = toDateKey(d);
+      const key = dateValueToKey(d);
       const count = dayCount.get(key) || 0;
       maxDaily = Math.max(maxDaily, count);
       streakPattern.push(count);
@@ -131,11 +139,17 @@ export default function ProfilePage() {
     });
 
     const last14Scores = [...scoredEntries]
-      .sort((a, b) => new Date(a.date || a.created_at) - new Date(b.date || b.created_at))
+      .sort((a, b) => {
+        const ta = entryCanonicalInstant(a)?.getTime() ?? 0;
+        const tb = entryCanonicalInstant(b)?.getTime() ?? 0;
+        return ta - tb;
+      })
       .slice(-14)
       .map((e) => ({
         score: e.parsed.meta.productivity_score,
-        label: new Date(e.date || e.created_at).toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1),
+        label: (entryCanonicalInstant(e) || new Date())
+          .toLocaleDateString(undefined, { weekday: "short" })
+          .slice(0, 1),
       }));
 
     const countMap = (values) => {
@@ -209,11 +223,15 @@ export default function ProfilePage() {
       : "conic-gradient(rgba(33,40,68,0.2) 0% 100%)";
 
     const recentEntries = [...entries]
-      .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at))
+      .sort((a, b) => {
+        const ta = entryCanonicalInstant(a)?.getTime() ?? 0;
+        const tb = entryCanonicalInstant(b)?.getTime() ?? 0;
+        return tb - ta;
+      })
       .slice(0, 6)
       .map((e) => ({
         id: e.id,
-        date: formatDate(e.date || e.created_at),
+        date: formatDate(entryCanonicalInstant(e) || e.date || e.created_at),
         title: e.title || e.narrative || (e.rawText || "Untitled").slice(0, 60),
         score: e.parsed?.meta?.productivity_score ?? null,
       }));
@@ -267,11 +285,15 @@ export default function ProfilePage() {
   const nameValue = user?.name || user?.email || "User";
   const initials = getInitials(nameValue);
   const memberSince = entries.length
-    ? new Date(
-        [...entries]
-          .sort((a, b) => new Date(a.date || a.created_at) - new Date(b.date || b.created_at))[0]
-          ?.date || Date.now()
-      ).toLocaleDateString(undefined, { month: "short", year: "numeric" })
+    ? (() => {
+        const oldest = [...entries].sort((a, b) => {
+          const ta = entryCanonicalInstant(a)?.getTime() ?? 0;
+          const tb = entryCanonicalInstant(b)?.getTime() ?? 0;
+          return ta - tb;
+        })[0];
+        const d = entryCanonicalInstant(oldest) || new Date();
+        return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+      })()
     : "N/A";
 
   return (
@@ -361,10 +383,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className={styles.card}>
-        <InsightCards variant="profile" maxCards={6} />
-      </div>
-
       <div className={styles.twoCol}>
         <div className={styles.card}>
           <div className={styles.secLabel}>Activity streak — last 30 days</div>
@@ -406,6 +424,10 @@ export default function ProfilePage() {
             <div className={styles.prodAvgLine} style={{ top: `${Math.round((1 - analytics.avgProd) * 72)}px` }}></div>
           </div>
         </div>
+      </div>
+
+      <div className={styles.card}>
+        <InsightCards variant="profile" maxCards={6} />
       </div>
 
       <div className={styles.twoCol}>

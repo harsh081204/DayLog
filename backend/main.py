@@ -34,6 +34,15 @@ if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is not set")
 
 JWT_ALGORITHM = "HS256"
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if o.strip()
+]
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -48,7 +57,7 @@ app.include_router(insights_router)
 # Add CORS middleware to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,8 +97,8 @@ def set_auth_cookie(response: Response, token: str):
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=False,  # Set to True in production (HTTPS)
-        samesite="lax", # "lax" is better for dev with different ports
+        secure=COOKIE_SECURE,
+        samesite="lax",
         max_age=604800,  # 7 days
         path="/"
     )
@@ -249,10 +258,11 @@ async def update_me(req: ProfileUpdateRequest, user_id: str = Depends(get_curren
 async def logout(response: Response):
     # Ensure cookie is deleted with matching path and attributes
     response.delete_cookie(
-        key=COOKIE_NAME, 
-        path="/", 
-        httponly=True, 
-        samesite="lax"
+        key=COOKIE_NAME,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
     )
     return {"status": "logged out"}
 
@@ -313,7 +323,9 @@ async def update_journal(journal_id: str, update: JournalUpdate, user_id: str = 
     update_data["updated_at"] = datetime.now(timezone.utc)
     
     await col.update_one({"_id": ObjectId(journal_id)}, {"$set": update_data})
-    return {"status": "updated"}
+    ts = update_data["updated_at"]
+    ts_iso = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+    return {"status": "updated", "updated_at": ts_iso}
 
 @app.post("/api/journals/{journal_id}/submit")
 async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get_current_user_id)):
@@ -338,13 +350,15 @@ async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get
     update_title = derive_title(raw_text, fallback=doc.get("title", "Untitled Entry"))
     
     # Update the document with processed results
+    _now = datetime.now(timezone.utc)
     update_result = {
         "processed": True,
         "parsed": parsed,
         "narrative": processed_data["journal_text"],
         "narrative_source": processed_data.get("journal_text_source", "unknown"),
         "title": update_title,
-        "processed_at": datetime.now(timezone.utc)
+        "processed_at": _now,
+        "updated_at": _now,
     }
     
     await col.update_one({"_id": ObjectId(journal_id)}, {"$set": update_result})
@@ -358,4 +372,4 @@ async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))

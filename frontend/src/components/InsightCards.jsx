@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchInsights } from "@/lib/insights";
+import { dismissInsightId, loadDismissedInsightIds } from "@/lib/insightStorage";
 import InsightCard from "./InsightCard";
 import styles from "./insights.module.css";
 
@@ -19,6 +20,16 @@ function formatUpdated(iso) {
 export default function InsightCards({ variant = "journal", maxCards = 4, refreshKey = 0 }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [dismissed, setDismissed] = useState([]);
+
+  useEffect(() => {
+    setDismissed(loadDismissedInsightIds());
+  }, []);
+
+  const handleDismiss = useCallback((id) => {
+    dismissInsightId(id);
+    setDismissed(loadDismissedInsightIds());
+  }, []);
 
   const load = useCallback(async () => {
     setError("");
@@ -67,8 +78,7 @@ export default function InsightCards({ variant = "journal", maxCards = 4, refres
   const pct = Math.min(100, Math.round((count / needed) * 100));
 
   if (!data.ready) {
-    const filled = Math.max(0, Math.min(7, count));
-    const barChars = Array.from({ length: 7 }, (_, i) => (i < filled ? "▓" : "░")).join("");
+    const barChars = Array.from({ length: 7 }, (_, i) => (i < Math.min(7, count) ? "▓" : "░")).join("");
     return (
       <div className={wrapClass}>
         <div className={styles.head}>
@@ -88,12 +98,14 @@ export default function InsightCards({ variant = "journal", maxCards = 4, refres
             {barChars}
           </div>
         </div>
+        <p className={styles.subline}>After seven processed entries, cards use your last 30 days of parsed data (no extra LLM calls).</p>
       </div>
     );
   }
 
-  const list = (data.insights || []).slice(0, maxCards);
+  const rawList = (data.insights || []).filter((i) => !dismissed.includes(i.id)).slice(0, maxCards);
   const showUpdated = variant === "profile" && data.updated_at;
+  const showDismiss = variant !== "profile";
 
   return (
     <div className={wrapClass}>
@@ -101,12 +113,13 @@ export default function InsightCards({ variant = "journal", maxCards = 4, refres
         <span className={styles.title}>Insights</span>
         {showUpdated ? <span className={styles.updated}>{formatUpdated(data.updated_at)}</span> : null}
       </div>
-      {list.length === 0 ? (
+      <p className={styles.subline}>Based on your last 30 days of processed entries.</p>
+      {rawList.length === 0 ? (
         <div className={styles.gateText}>No strong patterns yet. Keep journaling this month.</div>
       ) : (
         <div className={styles.grid}>
-          {list.map((insight) => (
-            <InsightCard key={insight.id} insight={insight} />
+          {rawList.map((insight) => (
+            <InsightCard key={insight.id} insight={insight} onDismiss={showDismiss ? handleDismiss : undefined} />
           ))}
         </div>
       )}
