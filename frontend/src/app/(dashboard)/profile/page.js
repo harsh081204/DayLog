@@ -3,6 +3,7 @@
 import styles from "./profile.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import InsightCards from "@/components/InsightCards";
 
 const STREAK_COLORS = ["rgba(33, 40, 68, 0.07)", "rgba(168, 198, 117, 0.3)", "rgba(168, 198, 117, 0.6)", "#a8c675"];
 const DONUT_COLORS = ["var(--c-blue)", "var(--c-green)", "var(--c-navy)", "var(--c-yellow)", "rgba(33,40,68,0.2)"];
@@ -358,6 +359,10 @@ export default function ProfilePage() {
             across {analytics.topSkills.length} top topics
           </div>
         </div>
+      </div>
+
+      <div className={styles.card}>
+        <InsightCards variant="profile" maxCards={6} />
       </div>
 
       <div className={styles.twoCol}>

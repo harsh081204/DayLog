@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import dashStyles from "../dashboard.module.css";
 import styles from "./journal.module.css";
+import InsightCards from "@/components/InsightCards";
 
 const deriveEntryTitle = (rawText, fallback = "Untitled Entry") => {
     const firstLine = (rawText || "").split("\n").map((line) => line.trim()).find(Boolean);
@@ -42,6 +43,7 @@ export default function JournalPage() {
     const [procStep, setProcStep] = useState(0);
     const [saveStatus, setSaveStatus] = useState("saved");
     const [isCreatingEntry, setIsCreatingEntry] = useState(false);
+    const [insightsRefresh, setInsightsRefresh] = useState(0);
     const saveTimeoutRef = useRef(null);
     const editorRef = useRef(null);
 
@@ -211,6 +213,7 @@ export default function JournalPage() {
                     setEntries(prev => prev.map(e => e.id === data.id ? data : e));
                     setActiveId(data.id);
                     setMode("result");
+                    setInsightsRefresh((k) => k + 1);
                 }, 600);
             })
             .catch(err => {
@@ -453,6 +456,8 @@ export default function JournalPage() {
                                     ))}
                                 </div>
                             </div>
+
+                            <InsightCards maxCards={3} refreshKey={insightsRefresh} />
                         </div>
                     </div>
                 )}

@@ -24,6 +24,8 @@ sys.path.append(os.path.join(project_root, "database"))
 
 from journal_service import create_journal_entry
 from database import connect_db, close_db, journals_col, users_col
+from deps import COOKIE_NAME, get_current_user_id, get_user_id_from_token
+from insights_router import router as insights_router
 
 # ── Config ───────────────────────────────────────────────────────────────────
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -32,7 +34,6 @@ if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is not set")
 
 JWT_ALGORITHM = "HS256"
-COOKIE_NAME = "token"
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 app = FastAPI(title="DayLog Backend", lifespan=lifespan)
+app.include_router(insights_router)
 
 # Add CORS middleware to allow frontend access
 app.add_middleware(
@@ -156,28 +158,6 @@ def score_productivity(parsed: dict) -> tuple[float, str]:
     )
     return normalized, reason
 
-def get_user_id_from_token(token: str):
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload.get("user_id")
-    except jwt.ExpiredSignatureError:
-        # Explicitly handle expired tokens
-        return None
-    except jwt.InvalidTokenError:
-        # Handle tampered or malformed tokens
-        return None
-    except Exception:
-        # Log other unexpected errors but still return None
-        return None
-
-async def get_current_user_id(token: Optional[str] = Cookie(None)):
-    if not token:
-        raise HTTPException(status_code=401, detail="not authenticated")
-    user_id = get_user_id_from_token(token)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="invalid token")
-    return user_id
-
 # ── Auth Routes ──────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/signup", status_code=201)
@@ -222,7 +202,7 @@ async def get_me(token: Optional[str] = Cookie(None)):
     user_id = get_user_id_from_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="invalid token")
-    
+
     col = users_col()
     user = await col.find_one({"_id": ObjectId(user_id)})
     if not user:
