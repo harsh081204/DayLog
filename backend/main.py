@@ -23,9 +23,10 @@ sys.path.append(os.path.join(project_root, "ai-layer"))
 sys.path.append(os.path.join(project_root, "database"))
 
 from journal_service import create_journal_entry
-from database import connect_db, close_db, journals_col, users_col
+from database import connect_db, close_db, journals_col, users_col, placement_goals_col
 from deps import COOKIE_NAME, get_current_user_id, get_user_id_from_token
 from insights_router import router as insights_router
+from placement_analysis_service import analyze_placement_readiness
 
 # ── Config ───────────────────────────────────────────────────────────────────
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -83,6 +84,12 @@ class ProfileUpdateRequest(BaseModel):
 class JournalUpdate(BaseModel):
     rawText: Optional[str] = None
     title: Optional[str] = None
+
+class PlacementGoalRequest(BaseModel):
+    target_company: str = Field(..., min_length=1)
+    target_role: str = Field(..., min_length=1)
+    current_status: str = Field(..., min_length=1) # e.g. "student", "final_year", "fresher"
+    target_skills: Optional[List[str]] = Field(default_factory=list)
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def create_jwt(user_id: str):
@@ -369,6 +376,45 @@ async def submit_and_process_journal(journal_id: str, user_id: str = Depends(get
         raise HTTPException(status_code=404, detail="Journal entry not found after processing")
         
     return fix_id(final_doc)
+
+# ── Placement Prep Routes ───────────────────────────────────────────────────
+
+@app.get("/api/placement/goal")
+async def get_placement_goal(user_id: str = Depends(get_current_user_id)):
+    col = placement_goals_col()
+    goal = await col.find_one({"user_id": user_id})
+    if not goal:
+        return {} # No goal set yet
+    return fix_id(goal)
+
+@app.put("/api/placement/goal")
+async def set_placement_goal(req: PlacementGoalRequest, user_id: str = Depends(get_current_user_id)):
+    col = placement_goals_col()
+    
+    update_doc = {
+        "user_id": user_id,
+        "target_company": req.target_company,
+        "target_role": req.target_role,
+        "current_status": req.current_status,
+        "target_skills": req.target_skills,
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    # Use upsert to create or update the single goal for this user
+    await col.update_one(
+        {"user_id": user_id},
+        {"$set": update_doc},
+        upsert=True
+    )
+    
+    goal = await col.find_one({"user_id": user_id})
+    return fix_id(goal)
+
+@app.get("/api/placement/analysis")
+async def get_placement_analysis(user_id: str = Depends(get_current_user_id)):
+    """Generates an AI analysis of user journals vs placement goal."""
+    analysis = await analyze_placement_readiness(user_id)
+    return analysis
 
 if __name__ == "__main__":
     import uvicorn

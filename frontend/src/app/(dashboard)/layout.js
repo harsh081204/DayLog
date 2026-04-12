@@ -33,6 +33,12 @@ export default function DashboardLayout({ children }) {
                         Journal
                     </Link>
                     <Link
+                        href="/placement"
+                        className={`${styles.tbLink} ${pathname.startsWith('/placement') ? styles.tbLinkActive : ''}`}
+                    >
+                        Placement Prep
+                    </Link>
+                    <Link
                         href="/profile"
                         className={`${styles.tbLink} ${pathname === '/profile' ? styles.tbLinkActive : ''}`}
                     >

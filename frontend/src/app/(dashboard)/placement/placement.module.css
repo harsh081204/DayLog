@@ -1,0 +1,167 @@
+.container {
+  max-width: 100%;
+  margin: 2rem 4rem;
+  padding: 0 1rem;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  color: var(--c-navy);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: rgba(33, 40, 68, 0.6);
+  font-size: 1.1rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.formSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--c-blue);
+  letter-spacing: 0.05em;
+}
+
+.statusOptions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.statusOption {
+  border: 1.5px solid rgba(33, 40, 68, 0.1);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+  background: white;
+}
+
+.statusOption:hover {
+  border-color: var(--c-blue);
+  background: rgba(32, 129, 195, 0.03);
+}
+
+.statusOptionActive {
+  border-color: var(--c-blue);
+  background: rgba(32, 129, 195, 0.05);
+  box-shadow: 0 0 0 2px rgba(32, 129, 195, 0.1);
+}
+
+.statusLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-navy);
+}
+
+.statusDesc {
+  font-size: 10px;
+  color: rgba(33, 40, 68, 0.5);
+}
+
+.inputField {
+  padding-left: 2.5rem !important;
+}
+
+.inputWithIcon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 0.8rem;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.emptyState {
+  background: white;
+  border: 2px dashed rgba(33, 40, 68, 0.1);
+  border-radius: var(--radius-lg);
+  padding: 3rem;
+  text-align: center;
+  color: rgba(33, 40, 68, 0.5);
+  font-family: var(--font-body);
+}
+
+.emptyIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.successMsg {
+  background: var(--c-green);
+  color: white;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.skillsList {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.skillItem {
+  background: rgba(33, 40, 68, 0.05);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.removeSkill {
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.removeSkill:hover {
+  opacity: 1;
+  color: var(--c-error);
+}

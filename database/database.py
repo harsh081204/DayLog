@@ -42,3 +42,6 @@ def journals_col():
 def users_col():
     return get_db()["users"]
 
+def placement_goals_col():
+    return get_db()["placement_goals"]
+
